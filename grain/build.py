@@ -110,6 +110,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         "-fdata-sections" if build_config.is_release else "",
         "-Wsign-compare",
         "-Wa,-mbig-obj",
+        "-DGRAIN_IS_RELEASE" if build_config.is_release else "",
         *map(lambda x: f"-I{x}", final_source.includes),
         *final_source.links,
         "-Wl,--gc-sections" if build_config.is_release else "",

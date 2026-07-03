@@ -174,13 +174,14 @@ def add_test_for_package(pkg_dir: typing.Optional[str]):
     new_package("app", "test", pkg_dir / "files")
     add_external_package(name, pkg_dir / "files" / "test", given=(name, 0))
 
-def run_test_for_package(pkg_dir: typing.Optional[str]):
+def run_test_for_package(pkg_dir: typing.Optional[str], argv: list[str]):
     if pkg_dir is None: pkg_dir = "."
     pkg_dir = pathlib.Path(pkg_dir).resolve()
     
     config = grain.config.Config.from_default()
     grain.build.build(config, pkg_dir / "files" / "test", grain.build.BuildConfig(
         output=str(config.ensure_default_build_path() / "main"),
+        is_release="--release" in argv,
         run_immediately=True,
         externals=[pkg_dir]
     ))
@@ -220,7 +221,7 @@ def main():
                 case "find": find_package(next_argv())
                 case "add-extneral": add_external_package(next_argv(), next_argv())
                 case "add-test": add_test_for_package(next_argv())
-                case "run-test": run_test_for_package(next_argv())
+                case "run-test": run_test_for_package(next_argv(), sys.argv)
                 case None: print("No command specified")
                 case _: print("Unknown command")
         
