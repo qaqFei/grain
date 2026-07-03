@@ -27,7 +27,7 @@ def print_grain_info():
     
     config.save(config_path)
 
-def new_package(package_type: typing.Literal["lib", "app"], package_name: typing.Optional[str]):
+def new_package(package_type: typing.Literal["lib", "app"], package_name: typing.Optional[str], pwd: typing.Optional[str] = None):
     if package_name is None:
         Logger.error("No package name specified")
         return
@@ -36,14 +36,14 @@ def new_package(package_type: typing.Literal["lib", "app"], package_name: typing
         Logger.error("Invalid package name")
         return
     
-    pkg_dir = pathlib.Path(package_name).resolve()
+    pkg_dir = pathlib.Path(package_name if pwd is None else (pwd / package_name)).resolve()
     
     if pkg_dir.exists():
         Logger.error(f"{pkg_dir} already exists")
         return
     
     Logger.info(f"Creating new package ({package_type}): {pkg_dir}")
-    pkg_dir.mkdir()
+    pkg_dir.mkdir(parents=True)
     
     if package_type == "lib":
         info = grain.package.LibraryInfo()
@@ -121,6 +121,70 @@ def clean_local_packages():
     config = grain.config.Config.from_default()
     grain.local.clean_packages(config.data_dir_as_path())
 
+def find_package(sub: typing.Optional[str]):
+    if sub is None:
+        Logger.error("No sub name specified")
+        return
+
+    config = grain.config.Config.from_default()
+    
+    for name, ver in grain.storage.get_all_packages(config.storage_repo_as_path()):
+        if sub in name:
+            print(f"{name} {ver}")
+
+def add_external_package(name: typing.Optional[str], pkg_dir: typing.Optional[str], *, given: typing.Optional[tuple[str, int]] = None):
+    if name is None:
+        Logger.error("No package name specified")
+        return
+    
+    if pkg_dir is None: pkg_dir = "."
+    pkg_dir = pathlib.Path(pkg_dir).resolve()
+    
+    config = grain.config.Config.from_default()
+    info = grain.package.load_package_info(pkg_dir)
+    
+    if given is None:
+        for packname, _ in grain.storage.get_all_packages(config.storage_repo_as_path()):
+            if packname == name:
+                version = grain.storage.get_latest_package_version(config.storage_repo_as_path(), name)
+                break
+        else:
+            Logger.error(f"Package {name} not found")
+            return
+    else:
+        packname, version = given
+    
+    info.requirements.externals.get().append(f"{packname}=={version}")
+    
+    with open(grain.package.get_package_info_path(pkg_dir), "w", encoding="utf-8") as f:
+        json.dump(info.dump(), f, **grain.utils.jdump_args())
+        
+    Logger.info(f"Added external package: {name}=={version}")
+
+def add_test_for_package(pkg_dir: typing.Optional[str]):
+    if pkg_dir is None: pkg_dir = "."
+    pkg_dir = pathlib.Path(pkg_dir).resolve()
+    
+    if (pkg_dir / "files" / "test").exists():
+        Logger.error("Test package already exists")
+        return
+    
+    name = grain.package.get_name_from_package(pkg_dir)
+    
+    new_package("app", "test", pkg_dir / "files")
+    add_external_package(name, pkg_dir / "files" / "test", given=(name, 0))
+
+def run_test_for_package(pkg_dir: typing.Optional[str]):
+    if pkg_dir is None: pkg_dir = "."
+    pkg_dir = pathlib.Path(pkg_dir).resolve()
+    
+    config = grain.config.Config.from_default()
+    grain.build.build(config, pkg_dir / "files" / "test", grain.build.BuildConfig(
+        output=str(config.ensure_default_build_path() / "main"),
+        run_immediately=True,
+        externals=[pkg_dir]
+    ))
+
 def main():
     import sys
     argv = sys.argv.copy()
@@ -153,6 +217,10 @@ def main():
                 case "ensure": ensure_package(next_argv(), next_argv())
                 case "build": build_package(next_argv(), sys.argv)
                 case "clean": clean_local_packages()
+                case "find": find_package(next_argv())
+                case "add-extneral": add_external_package(next_argv(), next_argv())
+                case "add-test": add_test_for_package(next_argv())
+                case "run-test": run_test_for_package(next_argv())
                 case None: print("No command specified")
                 case _: print("Unknown command")
         

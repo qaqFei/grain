@@ -132,3 +132,11 @@ def get_release_zip(repo: pathlib.Path, name: str, version: int):
 
     zstd_packed = (repo / "packages" / filename).read_bytes()
     return zstandard.ZstdDecompressor().decompress(zstd_packed)
+
+def get_all_packages(repo: pathlib.Path):
+    for file in (repo / "packages").iterdir():
+        if not file.is_file(): continue
+        yield grain.utils.parse_package_name(file.name[:-len(".grain")])
+
+def get_latest_package_version(repo: pathlib.Path, name: str):
+    return max((v for n, v in get_all_packages(repo) if n == name), default=0)

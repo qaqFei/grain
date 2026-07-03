@@ -108,6 +108,9 @@ type UnionPackageInfo = LibraryInfo | ApplicationInfo
 def get_name_from_info(info: UnionPackageInfo):
     return info.name if isinstance(info, ApplicationInfo) else info.namespace
 
+def get_name_from_package(pkg_dir: pathlib.Path):
+    return get_name_from_info(load_package_info(pkg_dir))
+
 def get_source_filename(info: UnionPackageInfo):
     return "lib.hpp" if isinstance(info, LibraryInfo) else "main.cpp"
 

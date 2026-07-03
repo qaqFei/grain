@@ -12,6 +12,17 @@ from grain.logger import Logger
 def pack_package_name(name: str, version: int):
     return f"{name}=={version}"
 
+def copy_includes_to(info: grain.package.LibraryInfo, pkg_dir: pathlib.Path, dst_dir: pathlib.Path):
+    if dst_dir.exists():
+        if dst_dir.is_file(): dst_dir.unlink()
+        else: shutil.rmtree(dst_dir)
+            
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    
+    for dir in info.exports.includes.get():
+        dir = grain.package.get_path_relative_to_package(pkg_dir, dir)
+        shutil.copytree(dir, dst_dir, dirs_exist_ok=True)
+
 def ensure_package(repo: pathlib.Path, data_dir: pathlib.Path, name: str, version: int, _visited: typing.Optional[set[tuple[str, int]]] = None):
     if _visited is None: _visited = set()
     _visited.add((name, version))
@@ -27,15 +38,11 @@ def ensure_package(repo: pathlib.Path, data_dir: pathlib.Path, name: str, versio
         
         if isinstance(info, grain.package.LibraryInfo):
             includes_dir = dirname / ".grain" / "includes" / info.namespace
-            libs_dir = dirname / ".grain" / "libs"
+            copy_includes_to(info, dirname, includes_dir)
             
-            includes_dir.mkdir(parents=True)
+            libs_dir = dirname / ".grain" / "libs"
             libs_dir.mkdir(parents=True)
             
-            for dir in info.exports.includes.get():
-                dir = grain.package.get_path_relative_to_package(dirname, dir)
-                shutil.copytree(dir, includes_dir, dirs_exist_ok=True)
-
             for file in info.exports.libs.get():
                 file = grain.package.get_path_relative_to_package(dirname, file)
                 shutil.copy2(file, libs_dir)
@@ -58,7 +65,7 @@ def ensure_package(repo: pathlib.Path, data_dir: pathlib.Path, name: str, versio
 
 def get_version(pkg_dir: pathlib.Path):
     path = pkg_dir / ".grain" / "version"
-    return int(path.read_text())
+    return int(path.read_text()) if path.exists() else None
 
 def clean_packages(data_dir: pathlib.Path):
     shutil.rmtree(data_dir / "packages")
