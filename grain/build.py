@@ -1,0 +1,114 @@
+import pathlib
+import dataclasses
+import subprocess
+
+import grain.package
+import grain.config
+import grain.utils
+import grain.local
+from grain.logger import Logger
+
+@dataclasses.dataclass
+class FinalSource:
+    code: str
+    includes: list[str]
+    links: list[str]
+
+@dataclasses.dataclass
+class BuildConfig:
+    output: str
+    is_release: bool = False
+    run_immediately: bool = False
+
+def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: pathlib.Path):
+    std_includes = set()
+    final_code = []
+    final_includes = []
+    final_links = []
+    
+    def trans_namespace(name: str, ver: int):
+        return f"{name}_{ver}"
+    
+    def process(pkg_dir: pathlib.Path, is_top: bool = False):
+        info = grain.package.load_package_info(pkg_dir)
+        std_includes.update(info.requirements.standards.get())
+        externals = info.requirements.externals.get()
+        
+        if is_top and isinstance(info, grain.package.LibraryInfo):
+            raise Exception("Cannot build a single library as an application")
+        
+        if not is_top and isinstance(info, grain.package.ApplicationInfo):
+            raise Exception("Cannot build an application as a library")
+        
+        version = grain.local.get_version(pkg_dir) if not is_top else 0
+        
+        for i in externals:
+            sub = grain.local.ensure_package(repo, data_dir, *grain.utils.parse_package_name(i))
+            process(sub)
+            
+        for name, ver in map(grain.utils.parse_package_name, externals):
+            final_code.append(f"#define {name} {trans_namespace(name, ver)}")
+        
+        if isinstance(info, grain.package.LibraryInfo):
+            final_code.append(f"#define {info.namespace} {trans_namespace(info.namespace, version)}")
+        
+        raw_source_path = pkg_dir / grain.package.get_source_filename(info)
+        final_code.append(raw_source_path.read_text(encoding="utf-8"))
+        
+        for name, _ in map(grain.utils.parse_package_name, externals):
+            final_code.append(f"#undef {name}")
+        
+        if isinstance(info, grain.package.LibraryInfo):
+            final_code.append(f"#undef {info.namespace}")
+        
+        if not is_top:
+            final_includes.append(str(pkg_dir / ".grain" / "includes"))
+            
+            for lib in (pkg_dir / ".grain" / "libs").iterdir():
+                final_links.append(str(lib))
+        
+    process(pkg_dir, is_top=True)
+    
+    final_code[:0] = map(lambda x: f"#include <{x}>", std_includes)
+    
+    final_code.append("""
+int main() {
+    entrypoint();
+    return 0;
+}
+""")
+
+    return FinalSource("\n".join(final_code), final_includes, final_links)
+
+def generate_build_command(config: grain.config.Config, final_source: FinalSource, build_config: BuildConfig):
+    source_path = config.ensure_default_build_path() / "source.cpp"
+    source_path.write_text(final_source.code, encoding="utf-8")
+    
+    result = [
+        config.compiler_gpp,
+        "-std=c++20", "-static",
+        "-Os" if build_config.is_release else "-O0",
+        "" if build_config.is_release else "-ggdb",
+        "-ffunction-sections" if build_config.is_release else "",
+        "-fdata-sections" if build_config.is_release else "",
+        "-Wsign-compare",
+        "-Wa,-mbig-obj",
+        *map(lambda x: f"-I{x}", final_source.includes),
+        *final_source.links,
+        "-Wl,--gc-sections" if build_config.is_release else "",
+        str(source_path),
+        "-o", build_config.output,
+    ]
+    
+    return list(filter(bool, result))
+
+def build(config: grain.config.Config, app_dir: pathlib.Path, build_config: BuildConfig):
+    final_source = generate_final_source(config.storage_repo_as_path(), config.data_dir_as_path(), app_dir)
+    command = generate_build_command(config, final_source, build_config)
+    Logger.info("Building application:", command)
+    
+    pro = subprocess.run(command)
+    pro.check_returncode()
+    
+    if build_config.run_immediately:
+        subprocess.run([build_config.output])

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grain"
+version = "0.0.1"
+description = "Hey"
+requires-python = ">=3.12"
+dependencies = [
+    "requests",
+    "fastapi",
+    "zstandard"
+]
+scripts = { grain = "grain.cli:main" }
