@@ -73,7 +73,7 @@ def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: p
                 for lib in (pkg_dir / ".grain" / "libs").iterdir():
                     final_links.append(str(lib))
             else:
-                grain.local.copy_includes_to(info, pkg_dir, pkg_dir / ".grain" / "includes")
+                grain.local.copy_includes_to(info, pkg_dir, pkg_dir / ".grain" / "includes" / info.namespace)
                 final_includes.append(str(pkg_dir / ".grain" / "includes"))
                 
                 for file in info.exports.libs.get():
