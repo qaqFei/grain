@@ -219,7 +219,7 @@ def main():
                 case "build": build_package(next_argv(), sys.argv)
                 case "clean": clean_local_packages()
                 case "find": find_package(next_argv())
-                case "add-extneral": add_external_package(next_argv(), next_argv())
+                case "add-external": add_external_package(next_argv(), next_argv())
                 case "add-test": add_test_for_package(next_argv())
                 case "run-test": run_test_for_package(next_argv(), sys.argv)
                 case None: print("No command specified")
