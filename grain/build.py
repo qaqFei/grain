@@ -13,6 +13,7 @@ class FinalSource:
     code: str
     includes: list[str]
     links: list[str]
+    platform_links: list[str]
 
 @dataclasses.dataclass
 class BuildConfig:
@@ -23,6 +24,7 @@ class BuildConfig:
 
 def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: pathlib.Path, build_config: BuildConfig):
     std_includes = set()
+    platform_links = set()
     processed_packages = set()
     final_code = []
     final_includes = []
@@ -82,6 +84,8 @@ def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: p
             
         if isinstance(info, grain.package.LibraryInfo):
             processed_packages.add(f"{info.namespace}=={version}")
+        
+        platform_links.update(info.requirements.platform_links.get())
     
     for i in build_config.externals: process(i)
     process(pkg_dir, is_app=True)
@@ -95,7 +99,7 @@ int main() {
 }
 """)
 
-    return FinalSource("\n".join(final_code), final_includes, final_links)
+    return FinalSource("\n".join(final_code), final_includes, final_links, list(platform_links))
 
 def generate_build_command(config: grain.config.Config, final_source: FinalSource, build_config: BuildConfig):
     source_path = config.ensure_default_build_path() / "source.cpp"
@@ -112,9 +116,10 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         "-Wa,-mbig-obj",
         "-DGRAIN_IS_RELEASE" if build_config.is_release else "",
         *map(lambda x: f"-I{x}", final_source.includes),
-        *final_source.links,
-        "-Wl,--gc-sections" if build_config.is_release else "",
         str(source_path),
+        *final_source.links,
+        *map(lambda x: f"-l{x}", final_source.platform_links),
+        "-Wl,--gc-sections" if build_config.is_release else "",
         "-o", build_config.output,
     ]
     

@@ -27,7 +27,7 @@ class PackageBaseInfo:
     @staticmethod
     def load(data: dict):
         return PackageBaseInfo(
-            requirements=grain.utils.Requirements.load(data["requirements"])
+            requirements=grain.utils.Requirements.load(data.get("requirements", {}))
         )
     
     def dump(self):
@@ -37,14 +37,14 @@ class PackageBaseInfo:
 
 @dataclasses.dataclass
 class LibraryExports:
-    includes: grain.utils.PlatformBasedData[list[str]] = dataclasses.field(default_factory=lambda: grain.utils.PlatformBasedData([]))
-    libs: grain.utils.PlatformBasedData[list[str]] = dataclasses.field(default_factory=lambda: grain.utils.PlatformBasedData([]))
+    includes: grain.utils.PlatformBasedList[str] = dataclasses.field(default_factory=lambda: grain.utils.PlatformBasedList([]))
+    libs: grain.utils.PlatformBasedList[str] = dataclasses.field(default_factory=lambda: grain.utils.PlatformBasedList([]))
     
     @staticmethod
     def load(data: dict):
         return LibraryExports(
-            includes=grain.utils.PlatformBasedData(data["includes"]),
-            libs=grain.utils.PlatformBasedData(data["libs"])
+            includes=grain.utils.PlatformBasedList(data.get("includes", [])),
+            libs=grain.utils.PlatformBasedList(data.get("libs", []))
         )
     
     def dump(self):
@@ -62,7 +62,7 @@ class LibraryInfo(PackageBaseInfo):
     def load(data: dict):
         return LibraryInfo(
             namespace=data["namespace"],
-            exports=LibraryExports.load(data["exports"]),
+            exports=LibraryExports.load(data.get("exports", {})),
             **PackageBaseInfo.load(data).__dict__
         )
     
