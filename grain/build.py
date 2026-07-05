@@ -1,6 +1,7 @@
 import pathlib
 import dataclasses
 import subprocess
+import json
 
 import grain.package
 import grain.config
@@ -29,6 +30,13 @@ def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: p
     final_code = []
     final_includes = []
     final_links = []
+    embed_files = {}
+    
+    final_code.append("""
+namespace grain {
+    void* get_embed_file(const char* name, int* size);
+}
+""")
     
     def trans_namespace(name: str, ver: int):
         return f"{name}_{ver}"
@@ -37,6 +45,7 @@ def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: p
         info = grain.package.load_package_info(pkg_dir)
         std_includes.update(info.requirements.standards.get())
         externals = info.requirements.externals.get()
+        pkg_name = grain.package.get_name_from_info(info)
         
         if is_app and isinstance(info, grain.package.LibraryInfo):
             raise Exception("Cannot build a single library as an application")
@@ -86,11 +95,37 @@ def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: p
             processed_packages.add(f"{info.namespace}=={version}")
         
         platform_links.update(info.requirements.platform_links.get())
+        
+        if not is_local:
+            embeds_dir = pkg_dir / ".grain" / "embeds"
+            
+            if embeds_dir.exists():
+                with open(embeds_dir / "catalog.json", "r", encoding="utf-8") as f:
+                    embeds_catalog: dict[str, str] = json.load(f)
+                
+                for key, value in embeds_catalog.items():
+                    embed_files[f"{pkg_name}/{key}"] = embeds_dir / value
+        else:
+            for key, file in info.requirements.embeds.items():
+                embed_files[f"{pkg_name}/{key}"] = grain.package.get_path_relative_to_package(pkg_dir, file)
     
     for i in build_config.externals: process(i)
     process(pkg_dir, is_app=True)
     
     final_code[:0] = map(lambda x: f"#include <{x}>", std_includes)
+    
+    final_code.append(f"""
+void* grain::get_embed_file(const char* name, int* size) {{
+    {"\n".join(map(lambda key, data, index: f"""
+{"if" if index == 0 else "else if"} (strcmp(name, "{key}") == 0) {{
+    *size = {len(data)};
+    static const unsigned char data[] = {{{",".join(map(str, data))}}};
+    return (void*)(&data[0]);
+}}
+""", embed_files.keys(), map(lambda x: open(x, "rb").read(), embed_files.values()), range(len(embed_files))))}
+    return nullptr;
+}}
+""")
     
     final_code.append("""
 int main() {

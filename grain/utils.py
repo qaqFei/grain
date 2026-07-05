@@ -56,20 +56,23 @@ class Requirements:
     externals: PlatformBasedList[str] = dataclasses.field(default_factory=lambda: PlatformBasedList([]))
     standards: PlatformBasedList[str] = dataclasses.field(default_factory=lambda: PlatformBasedList([]))
     platform_links: PlatformBasedList[str] = dataclasses.field(default_factory=lambda: PlatformBasedList([]))
+    embeds: dict[str, str] = dataclasses.field(default_factory=lambda: {})
     
     @staticmethod
     def load(data: dict):
         return Requirements(
             externals=PlatformBasedList(data.get("externals", [])),
             standards=PlatformBasedList(data.get("standards", [])),
-            platform_links=PlatformBasedList(data.get("platform_links", []))
+            platform_links=PlatformBasedList(data.get("platform_links", [])),
+            embeds=data.get("embeds", {})
         )
     
     def dump(self):
         return {
             "externals": self.externals.data,
             "standards": self.standards.data,
-            "platform_links": self.platform_links.data
+            "platform_links": self.platform_links.data,
+            "embeds": self.embeds
         }
         
 def walk_dir(path: pathlib.Path, callback: typing.Callable[[pathlib.Path], typing.Any]):

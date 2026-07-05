@@ -3,6 +3,8 @@ import zipfile
 import io
 import typing
 import shutil
+import uuid
+import json
 
 import grain.storage
 import grain.package
@@ -46,6 +48,19 @@ def ensure_package(repo: pathlib.Path, data_dir: pathlib.Path, name: str, versio
             for file in info.exports.libs.get():
                 file = grain.package.get_path_relative_to_package(dirname, file)
                 shutil.copy2(file, libs_dir)
+            
+            embeds_dir = dirname / ".grain" / "embeds"
+            embeds_dir.mkdir(parents=True)
+            embeds_catalog = {}
+            
+            for key, file in info.requirements.embeds.items():
+                newname = uuid.uuid5()
+                file = grain.package.get_path_relative_to_package(dirname, file)
+                shutil.copy2(file, embeds_dir / newname)
+                embeds_catalog[key] = newname
+            
+            with open(dirname / ".grain" / "embeds" / "catalog.json", "w", encoding="utf-8") as f:
+                json.dump(embeds_catalog, f, **grain.utils.jdump_args())
             
             raw_files = dirname / "files"
             if raw_files.exists():

@@ -17,6 +17,9 @@ def check_package_name(name: str):
     
     if name.startswith("_") or name.endswith("_") or name.startswith(tuple(string.digits)):
         return False
+    
+    if name == "grain":
+        return False
 
     return True
 
