@@ -82,6 +82,9 @@ def pack_package_as_bytes(path: pathlib.Path, info: grain.package.UnionPackageIn
     
     zip.writestr("info.json", json.dumps(info.dump(), **grain.utils.jdump_args()))
     
+    if (path / "README.md").is_file():
+        zip.write(path / "README.md", "README.md")
+    
     source_name = grain.package.get_source_filename(info)
     zip.write(path / source_name, source_name)
     
