@@ -11,6 +11,12 @@ import grain.local
 import grain.build
 from grain.logger import Logger
 
+def list_find[T](lst: list[T], it: T, start: int = 0):
+    try:
+        return lst.index(it, start)
+    except ValueError:
+        return -1
+
 def print_grain_info():
     config_path = grain.config.get_config_path()
     config = grain.config.Config.from_default()
@@ -97,7 +103,7 @@ def ensure_package(name: typing.Optional[str], version: typing.Optional[str]):
     config = grain.config.Config.from_default()
     grain.local.ensure_package(config.storage_repo_as_path(), config.data_dir_as_path(), name, version)
 
-def build_package(pkg_dir: typing.Optional[str], argv: list[str]):
+def build_package(pkg_dir: typing.Optional[str], argv: list[str], configurer: typing.Optional[typing.Callable[[grain.build.BuildConfig], None]] = None):
     if pkg_dir is None: pkg_dir = "."
     
     pkg_dir = pathlib.Path(pkg_dir).resolve()
@@ -114,6 +120,13 @@ def build_package(pkg_dir: typing.Optional[str], argv: list[str]):
     
     if "--release" in argv: build_config.is_release = True
     if "--run" in argv: build_config.run_immediately = True
+    
+    macro_i = list_find(argv, "--macro")
+    while macro_i != -1:
+        build_config.macros.append(argv[macro_i + 1])
+        macro_i = list_find(argv, "--macro", macro_i + 2)
+    
+    if configurer is not None: configurer(build_config)
     
     grain.build.build(config, pkg_dir, build_config)
 
@@ -178,13 +191,11 @@ def run_test_for_package(pkg_dir: typing.Optional[str], argv: list[str]):
     if pkg_dir is None: pkg_dir = "."
     pkg_dir = pathlib.Path(pkg_dir).resolve()
     
-    config = grain.config.Config.from_default()
-    grain.build.build(config, pkg_dir / "files" / "test", grain.build.BuildConfig(
-        output=str(config.ensure_default_build_path() / "main"),
-        is_release="--release" in argv,
-        run_immediately=True,
-        externals=[pkg_dir]
-    ))
+    def configurer(config: grain.build.BuildConfig):
+        config.run_immediately = True
+        config.externals.append(pkg_dir)
+    
+    build_package(pkg_dir / "files" / "test", argv, configurer)
 
 def main():
     import sys

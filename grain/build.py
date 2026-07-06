@@ -24,6 +24,7 @@ class BuildConfig:
     is_release: bool = False
     run_immediately: bool = False
     externals: list[pathlib.Path] = dataclasses.field(default_factory=list)
+    macros: list[str] = dataclasses.field(default_factory=list)
 
 def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: pathlib.Path, build_config: BuildConfig):
     std_includes = OrderedSet()
@@ -157,6 +158,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         "-Wsign-compare",
         "-Wa,-mbig-obj",
         "-DGRAIN_IS_RELEASE" if build_config.is_release else "",
+        *map(lambda x: f"-D{x}", build_config.macros),
         *map(lambda x: f"-I{x}", final_source.includes),
         str(source_path),
         *final_source.links,
