@@ -183,6 +183,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         *final_source.links,
         *map(lambda x: f"-l{x}", final_source.platform_links),
         "-Wl,--gc-sections" if build_config.is_release else "",
+        "-s" if build_config.is_release else "",
         "-o", build_config.output,
     ]
     
