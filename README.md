@@ -36,6 +36,9 @@ grain package build
 grain package build ./myapp
 grain package build . --run --release --out ./prog --macro MY_MACRO=1
 
+grain package pack [dir] [...args] # pack the library package, like this:
+grain package pack . --out ./mylib.zip
+
 grain package draft-release [dir] # draft a release, like this:
 grain package draft-release
 grain package draft-release ./mylib

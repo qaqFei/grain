@@ -2,7 +2,8 @@ import pathlib
 import dataclasses
 import subprocess
 import json
-import os
+import zipfile
+import uuid
 
 from ordered_set import OrderedSet
 
@@ -18,6 +19,7 @@ class FinalSource:
     includes: list[str]
     links: list[str]
     platform_links: list[str]
+    is_app: bool
 
 @dataclasses.dataclass
 class BuildConfig:
@@ -27,6 +29,11 @@ class BuildConfig:
     externals: list[pathlib.Path] = dataclasses.field(default_factory=list)
     macros: list[str] = dataclasses.field(default_factory=list)
 
+def parse_macro(macro: str):
+    eqi = macro.find("=")
+    if eqi == -1: return macro, None
+    return macro[:eqi], macro[eqi+1:]
+
 def generate_final_source(repo: pathlib.Path|str, data_dir: pathlib.Path, pkg_dir: pathlib.Path, build_config: BuildConfig):
     std_includes = OrderedSet()
     platform_links = OrderedSet()
@@ -35,6 +42,13 @@ def generate_final_source(repo: pathlib.Path|str, data_dir: pathlib.Path, pkg_di
     final_includes = []
     final_links = []
     embed_files = {}
+    
+    for name, value in map(parse_macro, build_config.macros):
+        if value is None: final_code.append(f"#define {name}")
+        else: final_code.append(f"#define {name} {value}")
+    
+    if build_config.is_release:
+        final_code.append("#define GRAIN_IS_RELEASE")
     
     final_code.append("""
 static int _grain_argc;
@@ -53,17 +67,11 @@ namespace grain {
     def trans_namespace(name: str, ver: int):
         return f"{name}_{ver}"
     
-    def process(pkg_dir: pathlib.Path, is_app: bool = False):
+    def process(pkg_dir: pathlib.Path):
         info = grain.package.load_package_info(pkg_dir)
         std_includes.update(info.requirements.standards.get())
         externals = info.requirements.externals.get()
         pkg_name = grain.package.get_name_from_info(info)
-        
-        if is_app and isinstance(info, grain.package.LibraryInfo):
-            raise Exception("Cannot build a single library as an application")
-        
-        if not is_app and isinstance(info, grain.package.ApplicationInfo):
-            raise Exception("Cannot build an application as a library")
         
         version = grain.local.get_version(pkg_dir)
         is_local = version is None
@@ -89,7 +97,7 @@ namespace grain {
         if isinstance(info, grain.package.LibraryInfo):
             final_code.append(f"#undef {info.namespace}")
         
-        if not is_app:
+        if isinstance(info, grain.package.LibraryInfo):
             links = []
             
             if not is_local:
@@ -130,9 +138,14 @@ namespace grain {
         else:
             for key, file in info.requirements.embeds.items():
                 embed_files[f"{pkg_name}/{key}"] = grain.package.get_path_relative_to_package(pkg_dir, file)
+        
+        return info, version
     
     for i in build_config.externals: process(i)
-    process(pkg_dir, is_app=True)
+    info, version = process(pkg_dir)
+    
+    if isinstance(info, grain.package.LibraryInfo):
+        final_code.append(f"#define {info.namespace} {trans_namespace(info.namespace, version)}")
     
     final_code[:0] = map(lambda x: f"#include <{x}>", std_includes)
     
@@ -149,7 +162,8 @@ void* grain::get_embed_file(const char* name, int* size) {{
 }}
 """)
     
-    final_code.append("""
+    if isinstance(info, grain.package.ApplicationInfo):
+        final_code.append("""
 int main(int argc, char** argv) {
     _grain_argc = argc;
     _grain_argv = argv;
@@ -161,9 +175,18 @@ int main(int argc, char** argv) {
     
     final_includes = list(filter(grain.utils.has_file_in_dir, map(pathlib.Path, final_includes)))
     
-    return FinalSource("\n".join(final_code), final_includes, final_links, reversed(list(platform_links)))
+    return FinalSource(
+        code="\n".join(final_code),
+        includes=final_includes,
+        links=final_links,
+        platform_links=list(reversed(platform_links)),
+        is_app=isinstance(info, grain.package.ApplicationInfo)
+    )
 
 def generate_build_command(config: grain.config.Config, final_source: FinalSource, build_config: BuildConfig):
+    if not final_source.is_app:
+        raise Exception("Cannot build a library as an executable")
+    
     source_path = config.ensure_default_build_path() / "source.cpp"
     source_path.write_text(final_source.code, encoding="utf-8")
     
@@ -176,8 +199,6 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         "-fdata-sections" if build_config.is_release else "",
         "-Wsign-compare",
         "-Wa,-mbig-obj",
-        "-DGRAIN_IS_RELEASE" if build_config.is_release else "",
-        *map(lambda x: f"-D{x}", build_config.macros),
         *map(lambda x: f"-I{x}", final_source.includes),
         str(source_path),
         *final_source.links,
@@ -192,10 +213,37 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
 def build(config: grain.config.Config, app_dir: pathlib.Path, build_config: BuildConfig):
     final_source = generate_final_source(config.get_storage(), config.data_dir_as_path(), app_dir, build_config)
     command = generate_build_command(config, final_source, build_config)
-    Logger.info("Building application:", command)
+    Logger.info("Compiling application:", command)
     
     pro = subprocess.run(command)
     pro.check_returncode()
     
     if build_config.run_immediately:
         subprocess.run([build_config.output])
+
+def pack(config: grain.config.Config, app_dir: pathlib.Path, build_config: BuildConfig):
+    final_source = generate_final_source(config.get_storage(), config.data_dir_as_path(), app_dir, build_config)
+    zippath = pathlib.Path(build_config.output).with_suffix(".zip")
+    Logger.info("Packing library to", zippath)
+    
+    zip = zipfile.ZipFile(zippath, "w", zipfile.ZIP_STORED)
+    zip.writestr("lib.hpp", final_source.code)
+    
+    for dir in final_source.includes:
+        grain.utils.walk_dir(dir, lambda p: zip.write(p, f"includes/{p.relative_to(dir)}"))
+    
+    link_catalog = {}
+    
+    for link in final_source.links:
+        name = f"{uuid.uuid4().hex}.a"
+        zip.write(link, f"libs/{name}")
+        link_catalog[link] = name
+    
+    zip.writestr("hint.json", json.dumps({
+        "platform_links": final_source.platform_links,
+        "linking_order": [
+            link_catalog[i]
+            for i in final_source.links
+        ]
+    }, **grain.utils.jdump_args()))
+    

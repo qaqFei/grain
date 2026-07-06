@@ -96,7 +96,12 @@ def package_draft_release(pkg_dir: typing.Optional[str], argv: list[str]):
     config = grain.config.Config.from_default().check_git()
     grain.storage.draft_release(config.storage_repo_as_path(), config.git, config.data_dir_as_path(), pkg_dir, version)
 
-def build_package(pkg_dir: typing.Optional[str], argv: list[str], configurer: typing.Optional[typing.Callable[[grain.build.BuildConfig], None]] = None):
+def build_package(
+    pkg_dir: typing.Optional[str], argv: list[str],
+    *,
+    configurer: typing.Optional[typing.Callable[[grain.build.BuildConfig], None]] = None,
+    builder: typing.Callable = grain.build.build
+):
     if pkg_dir is None: pkg_dir = "."
     
     pkg_dir = pathlib.Path(pkg_dir).resolve()
@@ -121,7 +126,7 @@ def build_package(pkg_dir: typing.Optional[str], argv: list[str], configurer: ty
     
     if configurer is not None: configurer(build_config)
     
-    grain.build.build(config, pkg_dir, build_config)
+    builder(config, pkg_dir, build_config)
 
 def clean_local_packages():
     config = grain.config.Config.from_default()
@@ -188,7 +193,7 @@ def run_test_for_package(pkg_dir: typing.Optional[str], argv: list[str]):
         config.run_immediately = True
         config.externals.append(pkg_dir)
     
-    build_package(pkg_dir / "files" / "test", argv, configurer)
+    build_package(pkg_dir / "files" / "test", argv, configurer=configurer)
 
 def set_config_kv(key: typing.Optional[str], value: typing.Optional[str]):
     if key is None:
@@ -202,6 +207,9 @@ def set_config_kv(key: typing.Optional[str], value: typing.Optional[str]):
     config = grain.config.Config.from_default()
     setattr(config, key, eval(value))
     config.save(grain.config.get_config_path())
+
+def pack_package(pkg_dir: typing.Optional[str], argv: list[str]):
+    build_package(pkg_dir, argv, builder=grain.build.pack)
 
 def main():
     import sys
@@ -242,6 +250,7 @@ def main():
                 case "find": find_package(next_argv())
                 case "add-external": add_external_package(next_argv(), next_argv())
                 case "build": build_package(next_argv(), sys.argv)
+                case "pack": pack_package(next_argv(), sys.argv)
                 case "draft-release": package_draft_release(next_argv(), sys.argv)
                 case "clean": clean_local_packages()
                 case "add-test": add_test_for_package(next_argv())
