@@ -26,7 +26,7 @@ class BuildConfig:
     externals: list[pathlib.Path] = dataclasses.field(default_factory=list)
     macros: list[str] = dataclasses.field(default_factory=list)
 
-def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: pathlib.Path, build_config: BuildConfig):
+def generate_final_source(repo: pathlib.Path|str, data_dir: pathlib.Path, pkg_dir: pathlib.Path, build_config: BuildConfig):
     std_includes = OrderedSet()
     platform_links = OrderedSet()
     processed_packages = set()
@@ -186,7 +186,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
     return list(filter(bool, result))
 
 def build(config: grain.config.Config, app_dir: pathlib.Path, build_config: BuildConfig):
-    final_source = generate_final_source(config.storage_repo_as_path(), config.data_dir_as_path(), app_dir, build_config)
+    final_source = generate_final_source(config.get_storage(), config.data_dir_as_path(), app_dir, build_config)
     command = generate_build_command(config, final_source, build_config)
     Logger.info("Building application:", command)
     

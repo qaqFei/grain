@@ -6,9 +6,12 @@ import shutil
 import uuid
 import json
 
+import zstandard
+
 import grain.storage
 import grain.package
 import grain.utils
+import grain.githubapi
 from grain.logger import Logger
 
 def pack_package_name(name: str, version: int):
@@ -25,14 +28,19 @@ def copy_includes_to(info: grain.package.LibraryInfo, pkg_dir: pathlib.Path, dst
         dir = grain.package.get_path_relative_to_package(pkg_dir, dir)
         shutil.copytree(dir, dst_dir, dirs_exist_ok=True)
 
-def ensure_package(repo: pathlib.Path, data_dir: pathlib.Path, name: str, version: int, _visited: typing.Optional[set[tuple[str, int]]] = None):
+def ensure_package(repo: pathlib.Path|str, data_dir: pathlib.Path, name: str, version: int, _visited: typing.Optional[set[tuple[str, int]]] = None):
     if _visited is None: _visited = set()
     _visited.add((name, version))
     
     dirname = data_dir / "packages" / pack_package_name(name, version)
     
     if not dirname.exists():
-        zipdata = grain.storage.get_release_zip(repo, name, version)
+        if isinstance(repo, pathlib.Path):
+            zstddata = grain.storage.get_release_zstd(repo, name, version)
+        else:
+            zstddata = grain.githubapi.get_release_zstd(repo, name, version)
+            
+        zipdata = zstandard.ZstdDecompressor().decompress(zstddata)
         zip = zipfile.ZipFile(io.BytesIO(zipdata))
         zip.extractall(dirname)
 

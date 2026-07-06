@@ -9,6 +9,7 @@ import grain.storage
 import grain.utils
 import grain.local
 import grain.build
+import grain.githubapi
 from grain.logger import Logger
 
 def list_find[T](lst: list[T], it: T, start: int = 0):
@@ -20,8 +21,10 @@ def list_find[T](lst: list[T], it: T, start: int = 0):
 def print_grain_info():
     config_path = grain.config.get_config_path()
     config = grain.config.Config.from_default()
+    config.auto_data_dir()
     config.auto_compiler()
     config.auto_git()
+    config.auto_online_storage_repo_url()
     
     print(f"Grain version: {grain.__version__}")
     print(f"Current platform: {grain.utils.get_current_platform()}")
@@ -30,6 +33,8 @@ def print_grain_info():
     print(f"Git: {config.git}")
     print(f"Compiler g++: {config.compiler_gpp}")
     print(f"Storage repo dir: {config.storage_repo_dir}")
+    print(f"Online storage repo url: {config.online_storage_repo_url}")
+    print(f"Use ghproxy: {config.use_ghproxy}")
     
     config.save(config_path)
 
@@ -89,20 +94,6 @@ def package_draft_release(pkg_dir: typing.Optional[str]):
     config = grain.config.Config.from_default().check_git()
     grain.storage.draft_release(config.storage_repo_as_path(), config.git, pkg_dir)
 
-def ensure_package(name: typing.Optional[str], version: typing.Optional[str]):
-    if name is None:
-        Logger.error("No package name specified")
-        return
-
-    if version is None:
-        Logger.error("No package version specified")
-        return
-    
-    version = int(version)
-    
-    config = grain.config.Config.from_default()
-    grain.local.ensure_package(config.storage_repo_as_path(), config.data_dir_as_path(), name, version)
-
 def build_package(pkg_dir: typing.Optional[str], argv: list[str], configurer: typing.Optional[typing.Callable[[grain.build.BuildConfig], None]] = None):
     if pkg_dir is None: pkg_dir = "."
     
@@ -141,7 +132,7 @@ def find_package(sub: typing.Optional[str]):
 
     config = grain.config.Config.from_default()
     
-    for name, ver in grain.storage.get_all_packages(config.storage_repo_as_path()):
+    for name, ver in grain.storage.get_all_packages(config.get_storage()):
         if sub in name:
             print(f"{name} {ver}")
 
@@ -157,9 +148,9 @@ def add_external_package(name: typing.Optional[str], pkg_dir: typing.Optional[st
     info = grain.package.load_package_info(pkg_dir)
     
     if given is None:
-        for packname, _ in grain.storage.get_all_packages(config.storage_repo_as_path()):
+        for packname, _ in grain.storage.get_all_packages(config.get_storage()):
             if packname == name:
-                version = grain.storage.get_latest_package_version(config.storage_repo_as_path(), name)
+                version = grain.storage.get_latest_package_version(config.get_storage(), name)
                 break
         else:
             Logger.error(f"Package {name} not found")
@@ -197,10 +188,26 @@ def run_test_for_package(pkg_dir: typing.Optional[str], argv: list[str]):
     
     build_package(pkg_dir / "files" / "test", argv, configurer)
 
+def set_config_kv(key: typing.Optional[str], value: typing.Optional[str]):
+    if key is None:
+        Logger.error("No key specified")
+        return
+
+    if value is None:
+        Logger.error("No value specified")
+        return
+
+    config = grain.config.Config.from_default()
+    setattr(config, key, eval(value))
+    config.save(grain.config.get_config_path())
+
 def main():
     import sys
     argv = sys.argv.copy()
     argv_index = 1
+    
+    config = grain.config.Config.from_default()
+    grain.githubapi.USE_GHPROXY = config.use_ghproxy
     
     def next_argv():
         nonlocal argv_index
@@ -226,7 +233,6 @@ def main():
                         case _: print("Unknown package type")
                         
                 case "draft-release": package_draft_release(next_argv())
-                case "ensure": ensure_package(next_argv(), next_argv())
                 case "build": build_package(next_argv(), sys.argv)
                 case "clean": clean_local_packages()
                 case "find": find_package(next_argv())
@@ -243,6 +249,11 @@ def main():
                 case "push": push_storage()
                 case None: print("No command specified")
                 case _: print("Unknown command")
+        
+        case "config":
+            match next_argv():
+                case "set": set_config_kv(next_argv(), next_argv())
+                case None: print("No command specified")
         
         case None: print("No command specified")
         case _: print("Unknown command")

@@ -8,6 +8,7 @@ import zstandard
 
 import grain.package
 import grain.utils
+import grain.githubapi
 from grain.logger import Logger
 
 class Git:
@@ -125,18 +126,22 @@ def draft_release(repo: pathlib.Path, git: str, package_path: pathlib.Path):
 def check_release_exist(repo: pathlib.Path, name: str, version: int):
     return (repo / "packages" / pack_package_name(name, version)).exists()
 
-def get_release_zip(repo: pathlib.Path, name: str, version: int):
+def get_release_zstd(repo: pathlib.Path, name: str, version: int):
     filename = pack_package_name(name, version)
     if not (repo / "packages" / filename).exists():
         raise Exception("Package not found")
 
-    zstd_packed = (repo / "packages" / filename).read_bytes()
-    return zstandard.ZstdDecompressor().decompress(zstd_packed)
+    return (repo / "packages" / filename).read_bytes()
 
-def get_all_packages(repo: pathlib.Path):
-    for file in (repo / "packages").iterdir():
-        if not file.is_file(): continue
-        yield grain.utils.parse_package_name(file.name[:-len(".grain")])
+def get_all_packages(repo: pathlib.Path|str):
+    if isinstance(repo, pathlib.Path):
+        for file in (repo / "packages").iterdir():
+            if not file.is_file(): continue
+            yield grain.utils.parse_package_name(file.name[:-len(".grain")])
+    else:
+        for file in grain.githubapi.get_item_desc(repo, "/packages"):
+            if file["type"] != "file": continue
+            yield grain.utils.parse_package_name(file["name"][:-len(".grain")])
 
-def get_latest_package_version(repo: pathlib.Path, name: str):
+def get_latest_package_version(repo: pathlib.Path|str, name: str):
     return max((v for n, v in get_all_packages(repo) if n == name), default=0)

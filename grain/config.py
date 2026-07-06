@@ -16,6 +16,7 @@ class Config:
     git: typing.Optional[str] = None
     compiler_gpp: typing.Optional[str] = None
     storage_repo_dir: typing.Optional[str] = None
+    online_storage_repo_url: typing.Optional[str] = None
     
     def load(self, path: str):
         config_data: dict = {}
@@ -31,6 +32,8 @@ class Config:
         self.git = config_data.get("git")
         self.compiler_gpp = config_data.get("compiler_gpp")
         self.storage_repo_dir = config_data.get("storage_repo_dir")
+        self.online_storage_repo_url = config_data.get("online_storage_repo_url")
+        self.use_ghproxy = config_data.get("use_ghproxy", False)
         self.save(path)
     
     def save(self, path: str):
@@ -38,7 +41,9 @@ class Config:
             "data_dir": self.data_dir,
             "git": self.git,
             "compiler_gpp": self.compiler_gpp,
-            "storage_repo_dir": self.storage_repo_dir
+            "storage_repo_dir": self.storage_repo_dir,
+            "online_storage_repo_url": self.online_storage_repo_url,
+            "use_ghproxy": self.use_ghproxy
         }
 
         try:
@@ -53,6 +58,10 @@ class Config:
         config.load(get_config_path())
         return config
     
+    def auto_data_dir(self):
+        if not self.data_dir:
+            self.data_dir = str(pathlib.Path.home() / ".grain_data")
+    
     def auto_compiler(self):
         if not self.compiler_gpp:
             self.compiler_gpp = shutil.which("g++")
@@ -60,6 +69,10 @@ class Config:
     def auto_git(self):
         if not self.git:
             self.git = shutil.which("git")
+    
+    def auto_online_storage_repo_url(self):
+        if not self.online_storage_repo_url:
+            self.online_storage_repo_url = "https://github.com/qaqFei/grain_storage.git"
     
     def storage_repo_as_path(self):
         return pathlib.Path(self.storage_repo_dir)
@@ -76,3 +89,6 @@ class Config:
         if not self.git:
             raise Exception("Git is not configured")
         return self
+    
+    def get_storage(self):
+        return self.storage_repo_as_path() if self.storage_repo_dir else self.online_storage_repo_url
