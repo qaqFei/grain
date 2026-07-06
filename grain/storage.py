@@ -2,6 +2,7 @@ import pathlib
 import subprocess
 import zipfile
 import io
+import typing
 import json
 
 import zstandard
@@ -9,6 +10,7 @@ import zstandard
 import grain.package
 import grain.utils
 import grain.githubapi
+import grain.local
 from grain.logger import Logger
 
 class Git:
@@ -89,7 +91,7 @@ def pack_package_as_bytes(path: pathlib.Path, info: grain.package.UnionPackageIn
     buf.seek(0)
     return buf.read()
 
-def draft_release(repo: pathlib.Path, git: str, package_path: pathlib.Path):
+def draft_release(repo: pathlib.Path, git: str, data_dir: pathlib.Path, package_path: pathlib.Path, version: typing.Optional[int] = None):
     info = grain.package.load_package_info(package_path)
     name = grain.package.get_name_from_info(info)
     
@@ -106,15 +108,19 @@ def draft_release(repo: pathlib.Path, git: str, package_path: pathlib.Path):
             if not check_release_exist(repo, extname, extver):
                 raise Exception(f"External {i} not found")
     
-    version = 0
+    if version is None:
+        version = 0
+        
+        while True:
+            if not (repo / "packages" / pack_package_name(name, version)).exists():
+                Logger.info("Found useable version:", version)
+                break
+            
+            version += 1
+            
+    filename = pack_package_name(name, version)
+    grain.local.remove_package(data_dir, name, version)
     
-    while True:
-        filename = pack_package_name(name, version)
-        if not (repo / "packages" / filename).exists():
-            break
-        version += 1
-    
-    Logger.info("Found useable version:", version)
     Logger.info("Packing package:", filename)
     
     store_packed = pack_package_as_bytes(package_path, info)

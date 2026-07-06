@@ -97,3 +97,11 @@ def get_version(pkg_dir: pathlib.Path):
 
 def clean_packages(data_dir: pathlib.Path):
     shutil.rmtree(data_dir / "packages")
+    Logger.info("Cleaned packages")
+
+def remove_package(data_dir: pathlib.Path, name: str, version: int):
+    try:
+        shutil.rmtree(data_dir / "packages" / pack_package_name(name, version))
+        Logger.info(f"Removed package in local: {name} {version}")
+    except FileNotFoundError:
+        pass

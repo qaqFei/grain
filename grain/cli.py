@@ -85,14 +85,16 @@ def push_storage():
     config = grain.config.Config.from_default().check_git()
     grain.storage.push_repo(config.storage_repo_as_path(), config.git, "by cli (grain storage push)")
 
-def package_draft_release(pkg_dir: typing.Optional[str]):
+def package_draft_release(pkg_dir: typing.Optional[str], argv: list[str]):
     if pkg_dir is None: pkg_dir = "."
     
     pkg_dir = pathlib.Path(pkg_dir).resolve()
     Logger.info(f"Drafting release for package: {pkg_dir}")
     
+    version = int(argv[argv.index("--force-version") + 1]) if "--force-version" in argv else None
+    
     config = grain.config.Config.from_default().check_git()
-    grain.storage.draft_release(config.storage_repo_as_path(), config.git, pkg_dir)
+    grain.storage.draft_release(config.storage_repo_as_path(), config.git, config.data_dir_as_path(), pkg_dir, version)
 
 def build_package(pkg_dir: typing.Optional[str], argv: list[str], configurer: typing.Optional[typing.Callable[[grain.build.BuildConfig], None]] = None):
     if pkg_dir is None: pkg_dir = "."
@@ -232,7 +234,7 @@ def main():
                         case None: print("No package type specified")
                         case _: print("Unknown package type")
                         
-                case "draft-release": package_draft_release(next_argv())
+                case "draft-release": package_draft_release(next_argv(), sys.argv)
                 case "build": build_package(next_argv(), sys.argv)
                 case "clean": clean_local_packages()
                 case "find": find_package(next_argv())
