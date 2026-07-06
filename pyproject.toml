@@ -11,6 +11,7 @@ dependencies = [
     "requests",
     "fastapi",
     "zstandard",
-    "ordered-set"
+    "ordered-set",
+    "tqdm"
 ]
 scripts = { grain = "grain.cli:main" }

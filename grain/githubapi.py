@@ -2,6 +2,8 @@ import urllib3
 import os
 from urllib.parse import urlparse
 
+import tqdm
+
 import grain.storage
 from grain.logger import Logger
 
@@ -68,12 +70,16 @@ def get_file(repo: str, path: str):
         desc["download_url"] = "https://ghproxy.net/" + desc["download_url"]
         
     Logger.info(f"downloading file {desc['download_url']}")
-    response = requests.get(desc["download_url"], verify=False)
+    response = requests.get(desc["download_url"], verify=False, stream=True)
+    response.raise_for_status()
     
-    if response.status_code != 200:
-        raise Exception(f"Failed to get file: {response.status_code} {response.text}")
-
-    return response.content
+    total_size = int(response.headers.get("content-length", 0))
+    
+    data = bytearray()
+    for i in tqdm.tqdm(response.iter_content(chunk_size=1024), desc=f"downloading {path}", total=total_size // 1024, unit="KB"):
+        data.extend(i)
+    
+    return data
 
 def get_release_zstd(repo: str, name: str, version: int):
     filename = grain.storage.pack_package_name(name, version)
