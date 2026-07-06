@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "requests",
     "fastapi",
-    "zstandard"
+    "zstandard",
+    "ordered-set"
 ]
 scripts = { grain = "grain.cli:main" }

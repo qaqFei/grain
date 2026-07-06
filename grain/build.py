@@ -3,6 +3,8 @@ import dataclasses
 import subprocess
 import json
 
+from ordered_set import OrderedSet
+
 import grain.package
 import grain.config
 import grain.utils
@@ -24,8 +26,8 @@ class BuildConfig:
     externals: list[pathlib.Path] = dataclasses.field(default_factory=list)
 
 def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: pathlib.Path, build_config: BuildConfig):
-    std_includes = set()
-    platform_links = set()
+    std_includes = OrderedSet()
+    platform_links = OrderedSet()
     processed_packages = set()
     final_code = []
     final_includes = []
@@ -78,18 +80,23 @@ namespace grain {
             final_code.append(f"#undef {info.namespace}")
         
         if not is_app:
+            links = []
+            
             if not is_local:
                 final_includes.append(str(pkg_dir / ".grain" / "includes"))
                 
                 for lib in (pkg_dir / ".grain" / "libs").iterdir():
-                    final_links.append(str(lib))
+                    links.append(str(lib))
             else:
                 grain.local.copy_includes_to(info, pkg_dir, pkg_dir / ".grain" / "includes" / info.namespace)
                 final_includes.append(str(pkg_dir / ".grain" / "includes"))
                 
                 for file in info.exports.libs.get():
                     file = grain.package.get_path_relative_to_package(pkg_dir, file)
-                    final_links.append(str(file))
+                    links.append(str(file))
+            
+            links.reverse()
+            final_links.extend(links)
             
         if isinstance(info, grain.package.LibraryInfo):
             processed_packages.add(f"{info.namespace}=={version}")
@@ -134,7 +141,7 @@ int main() {
 }
 """)
 
-    return FinalSource("\n".join(final_code), final_includes, final_links, list(platform_links))
+    return FinalSource("\n".join(final_code), final_includes, final_links, reversed(list(platform_links)))
 
 def generate_build_command(config: grain.config.Config, final_source: FinalSource, build_config: BuildConfig):
     source_path = config.ensure_default_build_path() / "source.cpp"
