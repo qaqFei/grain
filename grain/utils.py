@@ -89,3 +89,9 @@ def jdump_args():
 def parse_package_name(name: str):
     name, version = name.split("==")
     return name, int(version)
+
+def has_file_in_dir(path: pathlib.Path):
+    for p in path.rglob("*"):
+        if p.is_file():
+            return True
+    return False

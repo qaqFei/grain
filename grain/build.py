@@ -2,6 +2,7 @@ import pathlib
 import dataclasses
 import subprocess
 import json
+import os
 
 from ordered_set import OrderedSet
 
@@ -157,7 +158,9 @@ int main(int argc, char** argv) {
     return 0;
 }
 """)
-
+    
+    final_includes = list(filter(grain.utils.has_file_in_dir, map(pathlib.Path, final_includes)))
+    
     return FinalSource("\n".join(final_code), final_includes, final_links, reversed(list(platform_links)))
 
 def generate_build_command(config: grain.config.Config, final_source: FinalSource, build_config: BuildConfig):
