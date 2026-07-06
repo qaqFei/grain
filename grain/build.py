@@ -36,8 +36,16 @@ def generate_final_source(repo: pathlib.Path, data_dir: pathlib.Path, pkg_dir: p
     embed_files = {}
     
     final_code.append("""
+static int _grain_argc;
+static char** _grain_argv;
+
 namespace grain {
     void* get_embed_file(const char* name, int* size);
+    
+    void get_args(int* argc, char*** argv) {
+        *argc = _grain_argc;
+        *argv = _grain_argv;
+    }
 }
 """)
     
@@ -141,7 +149,10 @@ void* grain::get_embed_file(const char* name, int* size) {{
 """)
     
     final_code.append("""
-int main() {
+int main(int argc, char** argv) {
+    _grain_argc = argc;
+    _grain_argv = argv;
+    
     entrypoint();
     return 0;
 }
