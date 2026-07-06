@@ -226,6 +226,11 @@ def main():
     match next_argv():
         case "info": print_grain_info()
         
+        case "config":
+            match next_argv():
+                case "set": set_config_kv(next_argv(), next_argv())
+                case None: print("No command specified")
+                
         case "package":
             match next_argv():
                 case "new":
@@ -234,11 +239,11 @@ def main():
                         case None: print("No package type specified")
                         case _: print("Unknown package type")
                         
-                case "draft-release": package_draft_release(next_argv(), sys.argv)
-                case "build": build_package(next_argv(), sys.argv)
-                case "clean": clean_local_packages()
                 case "find": find_package(next_argv())
                 case "add-external": add_external_package(next_argv(), next_argv())
+                case "build": build_package(next_argv(), sys.argv)
+                case "draft-release": package_draft_release(next_argv(), sys.argv)
+                case "clean": clean_local_packages()
                 case "add-test": add_test_for_package(next_argv())
                 case "run-test": run_test_for_package(next_argv(), sys.argv)
                 case None: print("No command specified")
@@ -251,11 +256,6 @@ def main():
                 case "push": push_storage()
                 case None: print("No command specified")
                 case _: print("Unknown command")
-        
-        case "config":
-            match next_argv():
-                case "set": set_config_kv(next_argv(), next_argv())
-                case None: print("No command specified")
         
         case None: print("No command specified")
         case _: print("Unknown command")
