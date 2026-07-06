@@ -86,8 +86,13 @@ namespace grain {
             if not is_local:
                 final_includes.append(str(pkg_dir / ".grain" / "includes"))
                 
-                for lib in (pkg_dir / ".grain" / "libs").iterdir():
-                    links.append(str(lib))
+                libs_dir = pkg_dir / ".grain" / "libs"
+                
+                with open(libs_dir / "catalog.json", "r", encoding="utf-8") as f:
+                    libs_catalog: list[str] = json.load(f)
+                
+                for lib in libs_catalog:
+                    links.append(str(libs_dir / lib))
             else:
                 grain.local.copy_includes_to(info, pkg_dir, pkg_dir / ".grain" / "includes" / info.namespace)
                 final_includes.append(str(pkg_dir / ".grain" / "includes"))

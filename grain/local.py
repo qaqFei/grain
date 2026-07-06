@@ -44,10 +44,15 @@ def ensure_package(repo: pathlib.Path, data_dir: pathlib.Path, name: str, versio
             
             libs_dir = dirname / ".grain" / "libs"
             libs_dir.mkdir(parents=True)
+            libs_catalog = []
             
             for file in info.exports.libs.get():
                 file = grain.package.get_path_relative_to_package(dirname, file)
                 shutil.copy2(file, libs_dir)
+                libs_catalog.append(file.name)
+            
+            with open(dirname / ".grain" / "libs" / "catalog.json", "w", encoding="utf-8") as f:
+                json.dump(libs_catalog, f, **grain.utils.jdump_args())
             
             embeds_dir = dirname / ".grain" / "embeds"
             embeds_dir.mkdir(parents=True)
