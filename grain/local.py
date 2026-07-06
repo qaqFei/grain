@@ -67,7 +67,7 @@ def ensure_package(repo: pathlib.Path|str, data_dir: pathlib.Path, name: str, ve
             embeds_catalog = {}
             
             for key, file in info.requirements.embeds.items():
-                newname = uuid.uuid5()
+                newname = uuid.uuid4().hex
                 file = grain.package.get_path_relative_to_package(dirname, file)
                 shutil.copy2(file, embeds_dir / newname)
                 embeds_catalog[key] = newname
