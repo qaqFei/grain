@@ -149,15 +149,28 @@ namespace grain {
     
     final_code[:0] = map(lambda x: f"#include <{x}>", std_includes)
     
+    embed_keys_bucket = {}
+    def get_embed_varname(key: str):
+        if key not in embed_keys_bucket:
+            embed_keys_bucket[key] = len(embed_keys_bucket)
+            
+        id = embed_keys_bucket[key]
+        return f"_grain_embed_{id}"
+    
+    for key, file in embed_files.items():
+        with open(file, "rb") as f:
+            data = f.read()
+            
+        final_code.append(f"static const unsigned char {get_embed_varname(key)}[] = {{{",".join(map(str, data))}}};")
+    
     final_code.append(f"""
 void* grain::get_embed_file(const char* name, int* size) {{
-    {"\n".join(map(lambda key, data, index: f"""
+    {"\n".join(map(lambda key, index: f"""
 {"if" if index == 0 else "else if"} (strcmp(name, "{key}") == 0) {{
-    *size = {len(data)};
-    static const unsigned char data[] = {{{",".join(map(str, data))}}};
-    return (void*)(&data[0]);
+    *size = sizeof({get_embed_varname(key)});
+    return (void*)(&{get_embed_varname(key)}[0]);
 }}
-""", embed_files.keys(), map(lambda x: open(x, "rb").read(), embed_files.values()), range(len(embed_files))))}
+""", embed_files.keys(), range(len(embed_files))))}
     return nullptr;
 }}
 """)
@@ -193,7 +206,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
     result = [
         config.compiler_gpp,
         "-std=c++20", "-static",
-        "-Os" if build_config.is_release else "-O0",
+        "-O3" if build_config.is_release else "-O0",
         "" if build_config.is_release else "-ggdb",
         "-ffunction-sections" if build_config.is_release else "",
         "-fdata-sections" if build_config.is_release else "",
