@@ -3,6 +3,8 @@ import dataclasses
 import pathlib
 import platform
 
+FORCE_PLATFORM: typing.Optional[str] = None
+
 def get_current_platform():
     """
     Returns <name>::<arch> string for the current platform
@@ -10,6 +12,9 @@ def get_current_platform():
     <name> is one of "windows", "linux", "macos"
     <arch> is one of "x86_64", "i386", "arm64"
     """
+    
+    if FORCE_PLATFORM is not None:
+        return FORCE_PLATFORM
     
     system = platform.system().lower()
     if system == "windows": os_name = "windows"

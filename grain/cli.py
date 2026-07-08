@@ -219,6 +219,9 @@ def main():
     config = grain.config.Config.from_default()
     grain.githubapi.USE_GHPROXY = config.use_ghproxy
     
+    if "--force-platform" in argv:
+        grain.utils.FORCE_PLATFORM = argv[argv.index("--force-platform") + 1]
+    
     def next_argv():
         nonlocal argv_index
         
