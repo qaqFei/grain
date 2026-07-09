@@ -5,8 +5,10 @@
 Use the Grain CLI to pack your package:
 
 ```bash
-grain package pack . --output packed.zip
+grain package pack . --out packed.zip
 ```
+
+> ⚠️ Only one Grain package can be included per program. Multiple packages cannot be linked together directly due to conflicting global symbols in each package's `lib.hpp`. To use multiple, combine them into a single package first.
 
 This command generates a `packed.zip` archive in the current directory.
 
