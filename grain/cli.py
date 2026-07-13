@@ -118,6 +118,8 @@ def build_package(
     
     if "--release" in argv: build_config.is_release = True
     if "--run" in argv: build_config.run_immediately = True
+    if "--allow-ffast-math" in argv: build_config.allow_ffast_math = True
+    if "--allow-disable-rtti" in argv: build_config.allow_disable_rtti = True
     
     macro_i = list_find(argv, "--macro")
     while macro_i != -1:

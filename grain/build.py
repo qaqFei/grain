@@ -28,6 +28,8 @@ class BuildConfig:
     run_immediately: bool = False
     externals: list[pathlib.Path] = dataclasses.field(default_factory=list)
     macros: list[str] = dataclasses.field(default_factory=list)
+    allow_ffast_math: bool = False
+    allow_disable_rtti: bool = False
 
 def parse_macro(macro: str):
     eqi = macro.find("=")
@@ -210,6 +212,8 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         "" if build_config.is_release else "-ggdb",
         "-ffunction-sections" if build_config.is_release else "",
         "-fdata-sections" if build_config.is_release else "",
+        "-ffast-math" if build_config.is_release and build_config.allow_ffast_math else "",
+        "-fno-rtti" if build_config.is_release and build_config.allow_disable_rtti else "",
         "-Wsign-compare",
         "-Wa,-mbig-obj",
         *map(lambda x: f"-I{x}", final_source.includes),
