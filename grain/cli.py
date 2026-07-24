@@ -69,9 +69,13 @@ def new_package(package_type: typing.Literal["lib", "app"], package_name: typing
     
     (pkg_dir / grain.package.get_source_filename(info)).write_text(grain.package.get_default_source(info), encoding="utf-8")
         
-def init_storage():
+def init_empty_storage():
     config = grain.config.Config.from_default().check_git()
-    grain.storage.init_repo(config.storage_repo_as_path(), config.git)
+    grain.storage.init_empty_repo(config.storage_repo_as_path(), config.git)
+
+def init_clone_storage():
+    config = grain.config.Config.from_default().check_git()
+    grain.storage.init_clone_repo(config.storage_repo_as_path(), config.git, config.online_storage_repo_url)
 
 def set_storage_remote(remote: typing.Optional[str]):
     if remote is None:
@@ -265,7 +269,8 @@ def main():
         
         case "storage":
             match next_argv():
-                case "init": init_storage()
+                case "init-empty": init_empty_storage()
+                case "init-clone": init_clone_storage()
                 case "set-remote": set_storage_remote(next_argv())
                 case "push": push_storage()
                 case None: print("No command specified")

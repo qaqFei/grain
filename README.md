@@ -54,7 +54,8 @@ grain package run-test [dir] [...args] # run the test package, like this:
 grain package run-test
 grain package run-test --release
 
-grain storage init # init the storage repo
+grain storage init-empty # init the storage repo
+grain storage init-clone # init the storage repo by clone
 grain storage set-remote <url> # set the remote storage repo url
 grain storage push # push the storage repo manually
 ```

@@ -49,8 +49,12 @@ class Git:
         if self.run_get(["status", "--porcelain"]):
             self.run(["commit", "-m", message])
         return self
+    
+    def pull(self):
+        self.run(["pull", "origin", "main"])
+        return self
 
-def init_repo(repo: pathlib.Path, git: str):
+def init_empty_repo(repo: pathlib.Path, git: str):
     if repo.exists():
         raise Exception("Repo already exists")
     
@@ -59,6 +63,12 @@ def init_repo(repo: pathlib.Path, git: str):
     
     (repo / "packages").mkdir()
     (repo / ".grain.initialized-flag").touch()
+
+def init_clone_repo(repo: pathlib.Path, git: str, online_url: str):
+    if repo.exists():
+        raise Exception("Repo already exists")
+    
+    Git(git, ".").run(["clone", online_url, str(repo), "--depth=1"])
 
 def check_initialized(repo: pathlib.Path):
     if not (repo / ".grain.initialized-flag").exists():
@@ -69,7 +79,7 @@ def set_remote(repo: pathlib.Path, git: str, remote: str):
     Git(git, repo).set_remote(remote)
 
 def push_repo(repo: pathlib.Path, git: str, message: str, merge_all: bool = False):
-    g = Git(git, repo)
+    g = Git(git, repo).pull()
     if merge_all: g.reset_soft_to_first_commit()
     g.run(["add", "-A"]).commit(message).run(["push", "-u", "origin", "main", "-f"])
 
