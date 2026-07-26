@@ -46,8 +46,11 @@ class PlatformBasedList(typing.Generic[PlatformBasedListT]):
         sys, _ = platform.split("::")
         result = []
         
+        def match_key(key: str):
+            return key == platform or key == sys or key == "default"
+        
         for key, value in self.data.items():
-            if key == platform or key == sys or key == "default":
+            if any(map(match_key, key.split(","))):
                 result.extend(value)
         
         return result
