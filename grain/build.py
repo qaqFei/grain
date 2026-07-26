@@ -26,6 +26,7 @@ class BuildConfig:
     output: str
     is_release: bool = False
     run_immediately: bool = False
+    is_shared_library: bool = False
     externals: list[pathlib.Path] = dataclasses.field(default_factory=list)
     macros: list[str] = dataclasses.field(default_factory=list)
     allow_ffast_math: bool = False
@@ -51,6 +52,16 @@ def generate_final_source(repo: pathlib.Path|str, data_dir: pathlib.Path, pkg_di
     
     if build_config.is_release:
         final_code.append("#define GRAIN_IS_RELEASE")
+    
+    final_code.append("""
+#ifdef _MSC_VER
+    #define GRAIN_EXPORT __declspec(dllexport)
+#elif defined(__GNUC__) || defined(__clang__)
+    #define GRAIN_EXPORT __attribute__((visibility("default")))
+#else
+    #define GRAIN_EXPORT
+#endif
+""")
     
     final_code.append("""
 static int _grain_argc;
@@ -199,7 +210,7 @@ int main(int argc, char** argv) {
     )
 
 def generate_build_command(config: grain.config.Config, final_source: FinalSource, build_config: BuildConfig):
-    if not final_source.is_app:
+    if not final_source.is_app and not build_config.is_shared_library:
         raise Exception("Cannot build a library as an executable")
     
     source_path = config.ensure_default_build_path() / "source.cpp"
@@ -208,6 +219,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
     result = [
         config.compiler_gpp,
         "-std=c++20", "-static",
+        "-shared" if build_config.is_shared_library else "",
         "-O3" if build_config.is_release else "-O0",
         "" if build_config.is_release else "-ggdb",
         "-ffunction-sections" if build_config.is_release else "",
