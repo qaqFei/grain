@@ -4,6 +4,8 @@ import subprocess
 import json
 import zipfile
 import uuid
+import typing
+import re
 
 from ordered_set import OrderedSet
 
@@ -37,7 +39,36 @@ def parse_macro(macro: str):
     if eqi == -1: return macro, None
     return macro[:eqi], macro[eqi+1:]
 
-def generate_final_source(repo: pathlib.Path|str, data_dir: pathlib.Path, pkg_dir: pathlib.Path, build_config: BuildConfig):
+def make_include_commands(includes: list[str]) -> typing.Iterable[str]:
+    return map(lambda x: f"-I{x}", includes)
+
+def make_platform_link_commands(platform_links: list[str]) -> typing.Iterable[str]:
+    return map(lambda x: f"-l{x}", platform_links)
+
+def get_preprocessed(source: str, includes: list[str], config: grain.config.Config) -> typing.Optional[str]:
+    command = [
+        config.compiler_gpp,
+        "-x", "c++",
+        f"-std={config.get_lang_standard()}",
+        "-E", "-", "-P",
+        *make_include_commands(includes),
+    ]
+    
+    process = subprocess.run(
+        command,
+        input = source,
+        capture_output = True,
+        text = True,
+        encoding = "utf-8"
+    )
+    
+    if process.returncode != 0:
+        Logger.warn("Compiler preprocessing failed, some optimizations may not be available.")
+        return None
+    
+    return process.stdout
+    
+def generate_final_source(config: grain.config.Config, pkg_dir: pathlib.Path, build_config: BuildConfig):
     std_includes = OrderedSet()
     platform_links = OrderedSet()
     processed_packages = set()
@@ -61,6 +92,20 @@ def generate_final_source(repo: pathlib.Path|str, data_dir: pathlib.Path, pkg_di
 #else
     #define GRAIN_EXPORT
 #endif
+
+#define _GRAIN_MACRO_HELPER_CONCAT_IMPL(a, b) a##b
+#define GRAIN_MACRO_HELPER_CONCAT(a, b) _GRAIN_MACRO_HELPER_CONCAT_IMPL(a, b)
+
+#define _GRAIN_MACRO_HELPER_EVAL_IF_0(eval) ((void)0)
+#define _GRAIN_MACRO_HELPER_EVAL_IF_1(eval) eval
+#define GRAIN_MACRO_HELPER_EVAL_01IF(cond, eval) GRAIN_MACRO_HELPER_CONCAT(_GRAIN_MACRO_HELPER_EVAL_IF_, cond)(eval)
+
+#define _GRAIN_MACRO_HELPER_EVAL_IFN_0(eval) (eval)
+#define _GRAIN_MACRO_HELPER_EVAL_IFN_1(eval) ((void)0)
+#define GRAIN_MACRO_HELPER_EVAL_01IFN(cond, eval) GRAIN_MACRO_HELPER_CONCAT(_GRAIN_MACRO_HELPER_EVAL_IFN_, cond)(eval)
+
+#define GRAIN_MACRO_HELPER_DROP_RESOURCES_01IFN(cond, name) GRAIN_MACRO_HELPER_EVAL_01IFN(cond, GRAIN_DROP_RESOURCES(name))
+#define GRAIN_MACRO_HELPER_DROP_RESOURCES_01IF(cond, name) GRAIN_MACRO_HELPER_EVAL_01IF(cond, GRAIN_DROP_RESOURCES(name))
 """)
     
     final_code.append("""
@@ -75,6 +120,9 @@ namespace grain {
         *argv = _grain_argv;
     }
 }
+
+template <size_t N>
+void GRAIN_DROP_RESOURCES(const char (&str)[N]) { }
 """)
     
     def trans_namespace(name: str, ver: int):
@@ -92,7 +140,7 @@ namespace grain {
         
         for i in externals:
             if i in processed_packages: continue
-            sub = grain.local.ensure_package(repo, data_dir, *grain.utils.parse_package_name(i))
+            sub = grain.local.ensure_package(config.get_storage(), config.data_dir_as_path(), *grain.utils.parse_package_name(i))
             process(sub)
             
         for name, ver in map(grain.utils.parse_package_name, externals):
@@ -157,10 +205,38 @@ namespace grain {
     for i in build_config.externals: process(i)
     info, version = process(pkg_dir)
     
+    final_includes = list(filter(grain.utils.has_file_in_dir, map(pathlib.Path, final_includes)))
+    platform_links = list(reversed(platform_links))
+    
     if isinstance(info, grain.package.LibraryInfo):
         final_code.append(f"#define {info.namespace} {trans_namespace(info.namespace, version)}")
     
     final_code[:0] = map(lambda x: f"#include <{x}>", std_includes)
+    
+    preprocessed = get_preprocessed("\n".join(final_code), final_includes, config)
+    
+    if preprocessed is not None:
+        dropres_start, dropres_end = "GRAIN_DROP_RESOURCES(\"", "\")"
+        for start in grain.utils.find_all_substrings(preprocessed, dropres_start):
+            start += len(dropres_start)
+            end = preprocessed.find(dropres_end, start)
+            if end == -1: continue
+            
+            pattern = preprocessed[start:end]
+            
+            if pattern.startswith("!") and pattern.endswith("!"):
+                pattern = pattern[1:-1]
+            else:
+                pattern = re.escape(pattern)
+            
+            drops_count = 0
+            
+            for key in tuple(embed_files.keys()):
+                if re.search(pattern, key):
+                    embed_files.pop(key)
+                    drops_count += 1
+            
+            Logger.info(f"Droped {drops_count} embed files by pattern \"{pattern}\"")
     
     embed_keys_bucket = {}
     def get_embed_varname(key: str):
@@ -199,14 +275,12 @@ int main(int argc, char** argv) {
 }
 """)
     
-    final_includes = list(filter(grain.utils.has_file_in_dir, map(pathlib.Path, final_includes)))
-    
     return FinalSource(
-        code="\n".join(final_code),
-        includes=final_includes,
-        links=final_links,
-        platform_links=list(reversed(platform_links)),
-        is_app=isinstance(info, grain.package.ApplicationInfo)
+        code = "\n".join(final_code),
+        includes = final_includes,
+        links = final_links,
+        platform_links = platform_links,
+        is_app = isinstance(info, grain.package.ApplicationInfo)
     )
 
 def generate_build_command(config: grain.config.Config, final_source: FinalSource, build_config: BuildConfig):
@@ -218,7 +292,8 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
     
     result = [
         config.compiler_gpp,
-        "-std=c++20", "-static",
+        f"-std={config.get_lang_standard()}",
+        "-static" if grain.utils.get_current_platform().startswith("windows") else "",
         "-shared" if build_config.is_shared_library else "",
         "-O3" if build_config.is_release else "-O0",
         "" if build_config.is_release else "-ggdb",
@@ -228,11 +303,12 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         "-fno-rtti" if build_config.is_release and build_config.allow_disable_rtti else "",
         "-Wsign-compare",
         "-Wa,-mbig-obj",
-        *map(lambda x: f"-I{x}", final_source.includes),
+        *make_include_commands(final_source.includes),
         str(source_path),
         *final_source.links,
-        *map(lambda x: f"-l{x}", final_source.platform_links),
+        *make_platform_link_commands(final_source.platform_links),
         "-Wl,--gc-sections" if build_config.is_release else "",
+        "-Wl,-O1" if build_config.is_release else "",
         "-s" if build_config.is_release else "",
         "-o", build_config.output,
     ]
@@ -240,7 +316,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
     return list(filter(bool, result))
 
 def build(config: grain.config.Config, app_dir: pathlib.Path, build_config: BuildConfig):
-    final_source = generate_final_source(config.get_storage(), config.data_dir_as_path(), app_dir, build_config)
+    final_source = generate_final_source(config, app_dir, build_config)
     command = generate_build_command(config, final_source, build_config)
     Logger.info("Compiling application:", command)
     
@@ -251,7 +327,7 @@ def build(config: grain.config.Config, app_dir: pathlib.Path, build_config: Buil
         subprocess.run([build_config.output])
 
 def pack(config: grain.config.Config, app_dir: pathlib.Path, build_config: BuildConfig):
-    final_source = generate_final_source(config.get_storage(), config.data_dir_as_path(), app_dir, build_config)
+    final_source = generate_final_source(config, app_dir, build_config)
     zippath = pathlib.Path(build_config.output).with_suffix(".zip")
     Logger.info("Packing library to", zippath)
     

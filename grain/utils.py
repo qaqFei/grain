@@ -103,3 +103,9 @@ def has_file_in_dir(path: pathlib.Path):
         if p.is_file():
             return True
     return False
+
+def find_all_substrings(text: str, sub: str):
+    return [
+        i for i in range(len(text) - len(sub) + 1)
+        if text.startswith(sub, i)
+    ]

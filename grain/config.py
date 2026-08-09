@@ -92,3 +92,6 @@ class Config:
     
     def get_storage(self):
         return self.storage_repo_as_path() if self.storage_repo_dir else self.online_storage_repo_url
+
+    def get_lang_standard(self):
+        return "c++20"
