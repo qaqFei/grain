@@ -33,6 +33,7 @@ class BuildConfig:
     macros: list[str] = dataclasses.field(default_factory=list)
     allow_ffast_math: bool = False
     allow_disable_rtti: bool = False
+    hide_console: bool = False
 
 def parse_macro(macro: str):
     eqi = macro.find("=")
@@ -290,10 +291,15 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
     source_path = config.ensure_default_build_path() / "source.cpp"
     source_path.write_text(final_source.code, encoding="utf-8")
     
+    is_windows = grain.utils.get_current_platform().startswith("windows")
+    
+    if build_config.hide_console and not is_windows:
+        Logger.warn("Cannot hide console on non-windows platforms")
+    
     result = [
         config.compiler_gpp,
         f"-std={config.get_lang_standard()}",
-        "-static" if grain.utils.get_current_platform().startswith("windows") else "",
+        "-static" if is_windows else "",
         "-shared" if build_config.is_shared_library else "",
         "-O3" if build_config.is_release else "-O0",
         "" if build_config.is_release else "-ggdb",
@@ -310,6 +316,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
         "-Wl,--gc-sections" if build_config.is_release else "",
         "-Wl,-O1" if build_config.is_release else "",
         "-s" if build_config.is_release else "",
+        "-mwindows" if build_config.hide_console and is_windows else "",
         "-o", build_config.output,
     ]
     

@@ -125,6 +125,7 @@ def build_package(
     if "--shared-library" in argv: build_config.is_shared_library = True
     if "--allow-ffast-math" in argv: build_config.allow_ffast_math = True
     if "--allow-disable-rtti" in argv: build_config.allow_disable_rtti = True
+    if "--hide-console" in argv: build_config.hide_console = True
     
     macro_i = list_find(argv, "--macro")
     while macro_i != -1:
