@@ -291,7 +291,7 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
     source_path = config.ensure_default_build_path() / "source.cpp"
     source_path.write_text(final_source.code, encoding="utf-8")
     
-    is_windows = grain.utils.get_current_platform().startswith("windows")
+    is_windows = grain.utils.current_platform_is_windows()
     
     if build_config.hide_console and not is_windows:
         Logger.warn("Cannot hide console on non-windows platforms")
@@ -324,6 +324,23 @@ def generate_build_command(config: grain.config.Config, final_source: FinalSourc
 
 def build(config: grain.config.Config, app_dir: pathlib.Path, build_config: BuildConfig):
     final_source = generate_final_source(config, app_dir, build_config)
+    
+    running_processes = grain.utils.find_processes_by_path(build_config.output)
+    if running_processes:
+        Logger.warn(f"Found {len(running_processes)} running process{'es' if len(running_processes) > 1 else ''} with the same output file, {'they' if len(running_processes) > 1 else 'it'} will be killed")
+        
+        for i in running_processes:
+            try:
+                i.terminate()
+                
+                if not grain.utils.current_platform_is_windows():
+                    try: i.wait(timeout=3)
+                    except Exception: ...
+            except Exception: ...
+            finally:
+                try: i.kill()
+                except Exception: pass
+    
     command = generate_build_command(config, final_source, build_config)
     Logger.info("Compiling application:", command)
     

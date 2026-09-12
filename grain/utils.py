@@ -3,6 +3,8 @@ import dataclasses
 import pathlib
 import platform
 
+import psutil
+
 FORCE_PLATFORM: typing.Optional[str] = None
 
 def get_current_platform():
@@ -29,7 +31,10 @@ def get_current_platform():
     else: raise ValueError(f"Unsupported architecture: {machine}")
     
     return f"{os_name}::{arch}"
-    
+
+def current_platform_is_windows():
+    return get_current_platform().startswith("windows")
+   
 PlatformBasedListT = typing.TypeVar("PlatformBasedListT")
 class PlatformBasedList(typing.Generic[PlatformBasedListT]):
     data: list[PlatformBasedListT]|dict[str, list[PlatformBasedListT]]
@@ -109,3 +114,19 @@ def find_all_substrings(text: str, sub: str):
         i for i in range(len(text) - len(sub) + 1)
         if text.startswith(sub, i)
     ]
+
+def find_processes_by_path(path: str) -> list[psutil.Process]:
+    if current_platform_is_windows() and not path.lower().endswith(".exe"):
+        path += ".exe"
+        
+    path = pathlib.Path(path).resolve()
+    result = []
+    
+    for proc in psutil.process_iter(("pid", "exe")):
+        try:
+            if pathlib.Path(proc.info["exe"]).resolve() == path:
+                result.append(proc)
+        except Exception:
+            continue
+
+    return result
