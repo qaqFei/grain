@@ -78,6 +78,10 @@ def generate_final_source(config: grain.config.Config, pkg_dir: pathlib.Path, bu
     final_links = []
     embed_files = {}
     
+    final_code.append("""\
+#include <cstddef>
+""")
+    
     for name, value in map(parse_macro, build_config.macros):
         if value is None: final_code.append(f"#define {name}")
         else: final_code.append(f"#define {name} {value}")
